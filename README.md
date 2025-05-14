@@ -1,10 +1,10 @@
-📈 Sentiment Analysis-Based Stock Market Prediction
+## 📈 Sentiment Analysis-Based Stock Market Prediction
 This project integrates real-time sentiment analysis from Twitter and financial news with LSTM-based stock price prediction, providing a comprehensive dashboard for visualizing, analyzing, and forecasting stock trends.
 
-🧠 Project Overview
+## 🧠 Project Overview
 The goal is to enhance stock price forecasting by combining deep learning techniques with Natural Language Processing (NLP) for sentiment analysis, using both historical price data and real-time sentiment signals. The project is designed as a full-stack web application.
 
-🚀 Key Features
+## 🚀 Key Features
 🔄 Real-Time Stock Data: Fetched via the Alpha Vantage API.
 
 📰 News Sentiment Analysis: Uses NewsAPI + FinBERT to analyze financial news articles.
@@ -29,7 +29,7 @@ Exportable charts with zoom & pan support
 
 🌐 Flask Web App: Responsive UI using Tailwind CSS + Chart.js + dark-themed dashboard.
 
-📦 Technologies Used
+## 📦 Technologies Used
 Backend: Python, Flask, yfinance, Alpha Vantage, NewsAPI, Tweepy
 
 ML/DL: LSTM (Keras), Scikit-learn, FinBERT (HuggingFace Transformers)
@@ -40,9 +40,8 @@ NLP: Tokenization, Sentiment Scoring, Word Clouds
 
 Visualization: Matplotlib, Plotly, Chart.js
 
-📁 Folder Structure
 
-🧪 Use Cases
+## 🧪 Use Cases
 Short-term trading insights
 
 Market research for investors
