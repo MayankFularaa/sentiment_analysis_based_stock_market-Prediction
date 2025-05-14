@@ -1,0 +1,11 @@
+flask
+numpy
+pandas
+yfinance
+scikit-learn
+tensorflow
+transformers
+requests
+chartjs
+torch
+flask_sqlalchemy

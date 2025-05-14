@@ -1,0 +1,153 @@
+from flask import Flask, render_template, request, jsonify, redirect, url_for, session, flash
+from stock_data import get_price_alpha_vantage, get_stock_history
+from sentiment_analysis import get_twitter_sentiment
+from news_sentiment import get_news_sentiment
+from news_data import get_news_articles
+from lstm_model import predict_stock_price
+from flask_sqlalchemy import SQLAlchemy
+from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import datetime
+import os
+
+app = Flask(__name__)
+app.secret_key = 'your_secret_key_here'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
+db = SQLAlchemy(app)
+
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(150), unique=True, nullable=False)
+    password = db.Column(db.String(150), nullable=False)
+    search_history = db.relationship('SearchHistory', backref='user', lazy=True)
+
+class SearchHistory(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    ticker = db.Column(db.String(20), nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+@app.route("/")
+def index():
+    return render_template("index.html")
+
+@app.route("/register", methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = generate_password_hash(request.form['password'])
+        if User.query.filter_by(username=username).first():
+            flash('Username already exists')
+            return redirect(url_for('register'))
+        new_user = User(username=username, password=password)
+        db.session.add(new_user)
+        db.session.commit()
+        flash('Registration successful. Please log in.')
+        return redirect(url_for('login'))
+    return render_template("register.html")
+
+@app.route("/login", methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        user = User.query.filter_by(username=username).first()
+        if user and check_password_hash(user.password, password):
+            session['user_id'] = user.id
+            session['username'] = user.username
+            return redirect(url_for('predict_page'))
+        flash('Invalid credentials')
+    return render_template("login.html")
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
+
+@app.route("/predict")
+def predict_page():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    return render_template("predict.html")
+
+@app.route("/profile")
+def profile():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    user = User.query.get(session['user_id'])
+    return render_template("profile.html", user=user)
+
+@app.route("/api/predict")
+def api_predict():
+    if 'user_id' not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+    ticker = request.args.get("ticker")
+    time_frame = request.args.get("time_frame", "1d")
+    try:
+        user_id = session['user_id']
+        db.session.add(SearchHistory(user_id=user_id, ticker=ticker))
+        db.session.commit()
+        predicted_price = predict_stock_price(ticker)
+        return jsonify({"ticker": ticker, "predicted_price": predicted_price})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/get_current_stock_price")
+def get_current_price():
+    symbol = request.args.get("symbol", "")
+    if not symbol:
+        return jsonify({"error": "Missing stock symbol"}), 400
+    try:
+        price = get_price_alpha_vantage(symbol)
+        return jsonify({"symbol": symbol.upper(), "price": float(price)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+def process_sentiment(ticker):
+    try:
+        twitter_score = get_twitter_sentiment(ticker)
+        news_score = get_news_sentiment(ticker)
+        avg_score = round((twitter_score + news_score) / 2, 2)
+        return {
+            "twitter_sentiment": twitter_score,
+            "news_sentiment": news_score,
+            "sentiment_score": avg_score,
+            "positive": 1 if avg_score > 0 else 0,
+            "neutral": 1 if avg_score == 0 else 0,
+            "negative": 1 if avg_score < 0 else 0
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.route("/sentiment/<ticker>")
+def sentiment_path(ticker):
+    result = process_sentiment(ticker)
+    if "error" in result:
+        return jsonify(result), 500
+    return jsonify(result)
+
+@app.route("/history")
+def history():
+    ticker = request.args.get("ticker")
+    if not ticker:
+        return jsonify({"error": "Missing ticker parameter"}), 400
+    try:
+        history_data = get_stock_history(ticker)
+        return jsonify({
+            "ohlc": history_data["ohlc"],
+            "prices": history_data["prices"],
+            "dates": history_data["dates"]
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/news")
+def get_news():
+    ticker = request.args.get("ticker", "")
+    news = get_news_articles(ticker)
+    return jsonify({"articles": news})
+
+if __name__ == "__main__":
+    if not os.path.exists("users.db"):
+        with app.app_context():
+            db.create_all()
+    app.run(debug=True)
